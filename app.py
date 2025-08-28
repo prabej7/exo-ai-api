@@ -1,6 +1,6 @@
 # app.py
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 import pickle
 import numpy as np
 
@@ -11,23 +11,30 @@ with open(model_path, "rb") as file:
 
 app = Flask(__name__)
 
-
-@app.route("/")
+@app.route("/", methods=["GET"])
 def home():
-    return render_template("index.html")
-
+    return {"message": "Welcome to Exo-AI API!"}
 
 @app.route("/predict", methods=["POST"])
 def predict():
-    # Extract data from form
-    int_features = [int(x) for x in request.form.values()]
-    final_features = [np.array(int_features)]
+    try:
+        data = request.get_json()
 
-    # Make prediction
-    prediction = model.predict(final_features)
-    output = "Placed" if prediction[0] == 1 else "Not Placed"
+        # Expecting JSON like: { "features": [0.1, 0.2, ..., 58 values] }
+        features = data.get("features")
+        if features is None:
+            return jsonify({"error": "No features provided"}), 400
 
-    return {"message": "Success"}
+        # Convert to numpy array
+        features_array = np.array(features).reshape(1, -1)
+
+        # Make prediction
+        prediction = model.predict(features_array)
+
+        return jsonify({"prediction": int(prediction[0])})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
