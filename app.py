@@ -32,8 +32,21 @@ def predict():
 
         # Make prediction
         prediction = model.predict(features_array)
+        pred = int(prediction[0])
 
-        return jsonify({"prediction": int(prediction[0])})
+        # Map prediction to class label
+        prediction_labels = {
+            0: "FALSE POSITIVE",
+            1: "CONFIRMED",
+            2: "CANDIDATE",
+            3: "NOT DISPOSITIONED"
+        }
+        label = prediction_labels.get(pred, "Unknown")
+
+        return jsonify({
+            "prediction": pred,
+            "label": label
+        })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
