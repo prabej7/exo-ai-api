@@ -3,17 +3,19 @@
 from flask import Flask, request, jsonify
 import pickle
 import numpy as np
-
+from flask_cors import CORS
 # Load the trained model
 model_path = "trained_model.pkl"
 with open(model_path, "rb") as file:
     model = pickle.load(file)
 
 app = Flask(__name__)
+CORS(app)
 
 @app.route("/", methods=["GET"])
 def home():
     return {"message": "Welcome to Exo-AI API!"}
+
 
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -39,5 +41,6 @@ def predict():
 
 if __name__ == "__main__":
     import os
+
     port = int(os.environ.get("PORT", 10000))
     app.run(debug=True, host="0.0.0.0", port=port)
