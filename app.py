@@ -11,8 +11,7 @@ with open(model_path, "rb") as file:
     model = pickle.load(file)
 
 app = Flask(__name__)
-CORS(app)
-
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 @app.route("/", methods=["GET"])
 def home():
