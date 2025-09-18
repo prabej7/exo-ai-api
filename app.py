@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from train_pipeline import clean_dataset, merge_datasets, train_model
 
-
+new_model = None
 
 # Load the base model (static, pre-trained)
 with open("final_model.pkl", "rb") as f:
@@ -79,8 +79,7 @@ def train_new_model():
         )
 
         # Save model temporarily (can replace with per-user saving later)
-        with open("new_model.pkl", "wb") as f:
-            pickle.dump(model, f)
+        new_model = model
 
         # --- JSON safe conversion ---
         def make_json_safe(obj):
@@ -118,12 +117,10 @@ def predict_new_model():
         if not features:
             return jsonify({"error": "No features provided"}), 400
 
-        # Load the latest new model
-        with open("new_model.pkl", "rb") as f:
-            model = pickle.load(f)
+
 
         features_array = np.array(features).reshape(1, -1)
-        prediction = model.predict(features_array)
+        prediction = new_model.predict(features_array)
         return jsonify({"prediction": int(prediction[0])})
     except FileNotFoundError:
         return jsonify({"error": "No trained new model found. Train first at /train"}), 400
