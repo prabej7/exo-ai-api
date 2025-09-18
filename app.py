@@ -6,14 +6,12 @@ import pandas as pd
 from train_pipeline import clean_dataset, merge_datasets, train_model
 
 new_model = None
-
 # Load the base model (static, pre-trained)
 with open("final_model.pkl", "rb") as f:
     base_model = pickle.load(f)
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
-
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 @app.route("/", methods=["GET"])
 def home():
