@@ -11,7 +11,7 @@ with open("final_model.pkl", "rb") as f:
     base_model = pickle.load(f)
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": "https://exoai1.vercel.app"}})
 
 @app.route("/", methods=["GET"])
 def home():
