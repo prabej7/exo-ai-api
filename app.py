@@ -3,9 +3,14 @@ from flask_cors import CORS
 import pickle
 import numpy as np
 import pandas as pd
+from threading import Thread
+import uuid
+
 from train_pipeline import clean_dataset, merge_datasets, train_model
 
 new_model = None
+jobs = {}  # jobId -> status/results
+
 # Load the base model (static, pre-trained)
 with open("final_model.pkl", "rb") as f:
     base_model = pickle.load(f)
@@ -20,9 +25,6 @@ def home():
 
 @app.route("/predict", methods=["POST"])
 def predict_base():
-    """
-    Predict using the base static model
-    """
     try:
         data = request.get_json()
         features = data.get("features")
@@ -36,39 +38,29 @@ def predict_base():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/train", methods=["POST"])
-def train_new_model():
-    """
-    Train a new RandomForest model dynamically.
-    Expects CSV files sent via multipart/form-data with the keys:
-    stellar, toi, fpp, tce, koi
-    Optionally accepts n_estimators, random_state, test_size as form fields.
-    """
+# ---------- TRAINING (ASYNC) ----------
+def background_train(job_id, files, form_data):
+    global new_model
     try:
         required_keys = ["stellar", "toi", "fpp", "tce", "koi"]
-        files = request.files
 
-        # Check all required files exist
-        if not all(k in files for k in required_keys):
-            return jsonify({"error": f"Missing required files: {required_keys}"}), 400
-
-        # Load CSVs into DataFrames and clean
+        # Load CSVs
         stellar = clean_dataset(pd.read_csv(files["stellar"]))
         toi = clean_dataset(pd.read_csv(files["toi"]))
         fpp = clean_dataset(pd.read_csv(files["fpp"]))
         tce = clean_dataset(pd.read_csv(files["tce"]))
         koi = clean_dataset(pd.read_csv(files["koi"]))
 
-        # Get optional training parameters from form
-        n_estimators = request.form.get("n_estimators", default=500, type=int)
-        random_state = request.form.get("random_state", default=42, type=int)
-        test_size = request.form.get("test_size", default=0.2, type=float)
+        # Params
+        n_estimators = int(form_data.get("n_estimators", 500))
+        random_state = int(form_data.get("random_state", 42))
+        test_size = float(form_data.get("test_size", 0.2))
 
-        # Merge and clean
+        # Merge & clean
         master = merge_datasets(stellar, toi, fpp, tce, koi)
         master = clean_dataset(master)
 
-        # Train model with user-supplied parameters
+        # Train
         model, features, metrics = train_model(
             master,
             n_estimators=n_estimators,
@@ -76,10 +68,10 @@ def train_new_model():
             test_size=test_size
         )
 
-        # Save model temporarily (can replace with per-user saving later)
+        # Store model
         new_model = model
 
-        # --- JSON safe conversion ---
+        # Make JSON safe
         def make_json_safe(obj):
             if isinstance(obj, (np.ndarray, list)):
                 return [make_json_safe(x) for x in obj]
@@ -94,34 +86,59 @@ def train_new_model():
         safe_features = make_json_safe(features)
         safe_metrics = make_json_safe(metrics)
 
-        return jsonify({
-            "message": "Model trained successfully!",
+        jobs[job_id] = {
+            "status": "done",
             "features": safe_features,
             "metrics": safe_metrics
-        })
+        }
+    except Exception as e:
+        jobs[job_id] = {"status": "error", "error": str(e)}
 
+
+@app.route("/train", methods=["POST"])
+def train_new_model():
+    try:
+        required_keys = ["stellar", "toi", "fpp", "tce", "koi"]
+        files = request.files
+
+        # Check required files
+        if not all(k in files for k in required_keys):
+            return jsonify({"error": f"Missing required files: {required_keys}"}), 400
+
+        # Create job
+        job_id = str(uuid.uuid4())
+        jobs[job_id] = {"status": "running"}
+
+        # Start background thread
+        thread = Thread(target=background_train, args=(job_id, files, request.form))
+        thread.start()
+
+        return jsonify({"message": "Training started", "jobId": job_id})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/train-status/<job_id>", methods=["GET"])
+def train_status(job_id):
+    return jsonify(jobs.get(job_id, {"status": "not found"}))
+
+
+# ---------- PREDICT USING NEW MODEL ----------
 @app.route("/predict-new-model", methods=["POST"])
 def predict_new_model():
-    """
-    Predict using the dynamically trained model
-    """
+    global new_model
     try:
+        if new_model is None:
+            return jsonify({"error": "No trained new model found. Train first at /train"}), 400
+
         data = request.get_json()
         features = data.get("features")
         if not features:
             return jsonify({"error": "No features provided"}), 400
 
-
-
         features_array = np.array(features).reshape(1, -1)
         prediction = new_model.predict(features_array)
         return jsonify({"prediction": int(prediction[0])})
-    except FileNotFoundError:
-        return jsonify({"error": "No trained new model found. Train first at /train"}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
