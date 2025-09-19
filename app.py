@@ -105,24 +105,36 @@ def train_new_model():
         if not all(k in files for k in required_keys):
             return jsonify({"error": f"Missing required files: {required_keys}"}), 400
 
+        # Copy files into memory so the thread can use them later
+        file_data = {k: files[k].read() for k in required_keys}
+        form_data = request.form.to_dict()
+
         # Create job
         job_id = str(uuid.uuid4())
         jobs[job_id] = {"status": "running"}
 
         # Start background thread
-        thread = Thread(target=background_train, args=(job_id, files, request.form))
+        def run_background():
+            from io import BytesIO
+            try:
+                # Recreate file-like objects from memory
+                file_objs = {k: BytesIO(v) for k, v in file_data.items()}
+                background_train(job_id, file_objs, form_data)
+            except Exception as e:
+                jobs[job_id] = {"status": "error", "error": str(e)}
+
+        thread = Thread(target=run_background)
         thread.start()
 
+        # Immediate response
         return jsonify({"message": "Training started", "jobId": job_id})
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route("/train-status/<job_id>", methods=["GET"])
 def train_status(job_id):
     return jsonify(jobs.get(job_id, {"status": "not found"}))
-
-
 # ---------- PREDICT USING NEW MODEL ----------
 @app.route("/predict-new-model", methods=["POST"])
 def predict_new_model():
