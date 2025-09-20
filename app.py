@@ -52,6 +52,7 @@ def background_train(job_id, files, form_data):
         koi = clean_dataset(pd.read_csv(files["koi"]))
 
         # Params
+        print(form_data.get("n_estimators"))
         n_estimators = int(form_data.get("n_estimators", 500))
         random_state = int(form_data.get("random_state", 42))
         test_size = float(form_data.get("test_size", 0.2))
