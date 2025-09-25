@@ -39,6 +39,7 @@ def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
 
 def merge_datasets(
     stellar: pd.DataFrame,
+    toi: pd.DataFrame,
     fpp: pd.DataFrame,
     tce: pd.DataFrame,
     koi: pd.DataFrame,
@@ -49,7 +50,7 @@ def merge_datasets(
     Filters FPP below threshold and encodes target.
     """
     # Remove unnamed columns
-    for df in [stellar,  fpp, tce, koi]:
+    for df in [stellar, toi, fpp, tce, koi]:
         df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
 
     # Filter FPP

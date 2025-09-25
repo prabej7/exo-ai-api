@@ -42,23 +42,19 @@ def predict_base():
 def background_train(job_id, files, form_data):
     global new_model
     try:
-        required_keys = ["stellar", "toi", "fpp", "tce", "koi"]
-
         # Load CSVs
         stellar = clean_dataset(pd.read_csv(files["stellar"]))
-        toi = clean_dataset(pd.read_csv(files["toi"]))
         fpp = clean_dataset(pd.read_csv(files["fpp"]))
         tce = clean_dataset(pd.read_csv(files["tce"]))
         koi = clean_dataset(pd.read_csv(files["koi"]))
 
         # Params
-        print(form_data.get("n_estimators"))
         n_estimators = int(form_data.get("n_estimators", 500))
         random_state = int(form_data.get("random_state", 42))
         test_size = float(form_data.get("test_size", 0.2))
 
         # Merge & clean
-        master = merge_datasets(stellar, toi, fpp, tce, koi)
+        master = merge_datasets(stellar, fpp, tce, koi)
         master = clean_dataset(master)
 
         # Train
@@ -99,7 +95,7 @@ def background_train(job_id, files, form_data):
 @app.route("/train", methods=["POST"])
 def train_new_model():
     try:
-        required_keys = ["stellar", "toi", "fpp", "tce", "koi"]
+        required_keys = ["stellar",  "fpp", "tce", "koi"]
         files = request.files
 
         # Check required files
@@ -136,6 +132,16 @@ def train_new_model():
 @app.route("/train-status/<job_id>", methods=["GET"])
 def train_status(job_id):
     return jsonify(jobs.get(job_id, {"status": "not found"}))
+
+@app.route("/has-trained-model", methods=["GET"])
+def has_trained_model():
+    global new_model
+    if new_model is not None:
+        return jsonify({"has_trained_model": True})
+    else:
+        return jsonify({"has_trained_model": False})
+
+
 # ---------- PREDICT USING NEW MODEL ----------
 @app.route("/predict-new-model", methods=["POST"])
 def predict_new_model():
