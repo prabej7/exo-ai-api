@@ -11,9 +11,17 @@ from train_pipeline import clean_dataset, merge_datasets, train_model
 new_model = None
 jobs = {}  # jobId -> status/results
 
-# Load the base model (static, pre-trained)
+# Load both models at startup
 with open("final_model.pkl", "rb") as f:
     base_model = pickle.load(f)
+
+# Try to load XGBoost model, set to None if it fails
+try:
+    with open("xgboost_model.pkl", "rb") as f:
+        xgboost_model = pickle.load(f)
+except (EOFError, FileNotFoundError, pickle.UnpicklingError):
+    print("Warning: Could not load xgboost_model.pkl. XGBoost predictions will not be available.")
+    xgboost_model = None
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -22,21 +30,31 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 def home():
     return {"message": "Welcome to Exo-AI API!"}
 
-
 @app.route("/predict", methods=["POST"])
 def predict_base():
+    """
+    Accepts JSON with:
+      - features: list of features
+      - model: (optional) "base" (default), "xgboost"
+    """
     try:
         data = request.get_json()
         features = data.get("features")
+        model_type = data.get("model", "base")  # default to "base"
         if not features:
             return jsonify({"error": "No features provided"}), 400
 
         features_array = np.array(features).reshape(1, -1)
-        prediction = base_model.predict(features_array)
+        if model_type == "xgboost":
+            if xgboost_model is None:
+                return jsonify({"error": "XGBoost model not available"}), 400
+            prediction = xgboost_model.predict(features_array)
+        else:
+            prediction = base_model.predict(features_array)
+     
         return jsonify({"prediction": int(prediction[0])})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 # ---------- TRAINING (ASYNC) ----------
 def background_train(job_id, files, form_data):
@@ -91,7 +109,6 @@ def background_train(job_id, files, form_data):
     except Exception as e:
         jobs[job_id] = {"status": "error", "error": str(e)}
 
-
 @app.route("/train", methods=["POST"])
 def train_new_model():
     try:
@@ -141,7 +158,6 @@ def has_trained_model():
     else:
         return jsonify({"has_trained_model": False})
 
-
 # ---------- PREDICT USING NEW MODEL ----------
 @app.route("/predict-new-model", methods=["POST"])
 def predict_new_model():
@@ -160,7 +176,6 @@ def predict_new_model():
         return jsonify({"prediction": int(prediction[0])})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 if __name__ == "__main__":
     import os
